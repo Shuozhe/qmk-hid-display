@@ -34,8 +34,8 @@ function startPerfMonitor() {
     counters.set('cpu', '\\Processor(_Total)\\% Processor Time');
     counters.set('mem', '\\Memory\\% Committed Bytes In Use');
     counters.set('dsk', '\\PhysicalDisk(_Total)\\% Disk Time');
-    counters.set('net_used', '\\Network Interface(*)\\Bytes Total/sec');
-    counters.set('net_total', '\\Network Interface(*)\\Current Bandwidth');
+    // counters.set('net_used', '\\Network Interface(*)\\Bytes Total/sec');
+    // counters.set('net_total', '\\Network Interface(*)\\Current Bandwidth');
 
     function getStat(name, data) {
         // Convert the counter data into a value 1-10 that we can use to generate a bar graph
