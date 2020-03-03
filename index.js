@@ -5,8 +5,8 @@ const perfmon = require('perfmon');
 const request = require('request');
 
 // Keyboard info
-const KEYBOARD_NAME = "Lily58";
-const KEYBOARD_USAGE_ID =  0x61;
+const KEYBOARD_NAME = "SPLIT_PERSONALITY";
+const KEYBOARD_USAGE_ID = 0x61;
 const KEYBOARD_USAGE_PAGE = 0xFF60;
 const KEYBOARD_UPDATE_TIME = 1000;
 
@@ -34,8 +34,8 @@ function startPerfMonitor() {
     counters.set('cpu', '\\Processor(_Total)\\% Processor Time');
     counters.set('mem', '\\Memory\\% Committed Bytes In Use');
     counters.set('dsk', '\\PhysicalDisk(_Total)\\% Disk Time');
-    // counters.set('net_used', '\\Network Interface(*)\\Bytes Total/sec');
-    // counters.set('net_total', '\\Network Interface(*)\\Current Bandwidth');
+    counters.set('net_used', '\\Network Interface(Intel[R] Ethernet Connection I217-V)\\Bytes Total/sec');
+    counters.set('net_total', '\\Network Interface(Intel[R] Ethernet Connection I217-V)\\Current Bandwidth');
 
     function getStat(name, data) {
         // Convert the counter data into a value 1-10 that we can use to generate a bar graph
@@ -234,6 +234,8 @@ async function sendToKeyboard(screen) {
     lines.push([0].concat(screenBuffer.slice(42, 63)));
     lines.push([0].concat(screenBuffer.slice(63, 84)));
 
+    console.log(`Send to keyboard: ${lines}`);
+
     // Loop through and send each line after a small delay to allow the
     // keyboard to store it ready to send to the slave side once full.
     let index = 0;
@@ -260,17 +262,24 @@ function updateKeyboardScreen() {
                 // Listen for data from the keyboard which indicates the screen to show
                 keyboard.on('data', (e) => {
                     // Check that the data is a valid screen index and update the current one
-                    if (e[0] >= 1 && e[0] <= screens.length) {
-                        currentScreenIndex = e[0] - 1;
+                    if (e[0] >= 1) {
+                        if (e[0] <= screens.length)
+                            currentScreenIndex = e[0] - 1;
+                        else {
+                            keyboard.write([0, 1, screens.length]);
+                            console.log(`Keyboard initialized: ${screens.length} screens`);
+                            currentScreenIndex = 0;
+                        }
                         console.log(`Keyboard requested screen index: ${currentScreenIndex}`);
                     }
                 });
 
                 // On the initial connection write our special sequence
-                // 1st byte - unused and thrown away on windows see bug in node-hid
+                // 1st byte - unused and thrown away on windows see bug   in node-hid
                 // 2nd byte - 1 to indicate a new connection
                 // 3rd byte - number of screens the keyboard can scroll through
                 keyboard.write([0, 1, screens.length]);
+                console.log(`Keyboard initialized: ${screens.length} screens`);
                 break;
             }
         }
