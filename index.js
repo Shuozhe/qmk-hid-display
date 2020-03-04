@@ -34,48 +34,65 @@ function startPerfMonitor() {
     counters.set('cpu', '\\Processor(_Total)\\% Processor Time');
     counters.set('mem', '\\Memory\\% Committed Bytes In Use');
     counters.set('dsk', '\\PhysicalDisk(_Total)\\% Disk Time');
-    counters.set('net_used', '\\Network Interface(Intel[R] Ethernet Connection I217-V)\\Bytes Total/sec');
-    counters.set('net_total', '\\Network Interface(Intel[R] Ethernet Connection I217-V)\\Current Bandwidth');
+    perfmon.list('Network Interface', function (err, data) {
+        data.counters.forEach(cnt => {
+            if (cnt.match('Network Interface\(.*Ethernet.*\)\\Bytes Total\/sec')) {
+                counters.set('net_used', '\\' + cnt);
+                // counters.set('net_total', '\\Network Interface(Intel[R] Ethernet Connection I217-LM)\\Bytes Total/sec');
+                return;
+            }
+        });
+        if (!counters.has('net_used'))
+            data.counters.forEach(function (cnt) {
+                if (cnt.match('Network Interface\(.*\)\\Bytes Total\/sec')) {
+                    counters.set('net_used', '\\' + cnt);
+                    return;
+                }
+            });
 
-    function getStat(name, data) {
-        // Convert the counter data into a value 1-10 that we can use to generate a bar graph
-        const value = Math.floor(data.counters[counters.get(name)] / 100.0 * 10);
-        return Math.min(10, Math.max(1, value));
-    }
+        let adapterName = counters.get('net_used').match(/\(([^)]+)\)/)[1];
+        counters.set('net_total', '\\Network Interface(' + adapterName + ')\\Current Bandwidth');
 
-    function getNetwork(data) {
-        // Calculate the network usage and turn it into a value 1-10 that we can use to generate a bar graph
-        const used = data.counters[counters.get('net_used')] * 8.0;
-        const total = data.counters[counters.get('net_total')];
-        const value = Math.floor(used / total * 10);
-        return Math.min(10, Math.max(1, value));
-    }
-
-    perfmon([...counters.values()], function (err, data) {
-        if (!data || Object.getOwnPropertyNames(data.counters).length < counters.size) {
-            // Sometimes perfmon doesn't get all the counters working, no idea why.
-            // Let's just restart to try it again
-            console.log("Could not find all perf counters, restarting perfmon...");
-            perfmon.stop();
-            perfmon.start();
-            return;
+        function getStat(name, data) {
+            // Convert the counter data into a value 1-10 that we can use to generate a bar graph
+            const value = Math.floor(data.counters[counters.get(name)] / 100.0 * 10);
+            return Math.min(10, Math.max(1, value));
         }
 
-        // Get the value for each stat
-        const cpu = getStat('cpu', data);
-        const mem = getStat('mem', data);
-        const dsk = getStat('dsk', data);
-        const net = getNetwork(data);
+        function getNetwork(data) {
+            // Calculate the network usage and turn it into a value 1-10 that we can use to generate a bar graph
+            const used = data.counters[counters.get('net_used')] * 8.0;
+            const total = data.counters[counters.get('net_total')];
+            const value = Math.floor(used / total * 10);
+            return Math.min(10, Math.max(1, value));
+        }
 
-        // Create a screen with the data
-        const screen =
-            `cpu: ${'\u0008'.repeat(cpu)}${' '.repeat(Math.max(0, 10 - cpu))} |  ${title(0, 0)} ` +
-            `mem: ${'\u0008'.repeat(mem)}${' '.repeat(Math.max(0, 10 - mem))} |  ${title(1, 0)} ` +
-            `dsk: ${'\u0008'.repeat(dsk)}${' '.repeat(Math.max(0, 10 - dsk))} |  ${title(2, 0)} ` +
-            `net: ${'\u0008'.repeat(net)}${' '.repeat(Math.max(0, 10 - net))} |  ${title(3, 0)} `;
+        perfmon([...counters.values()], function (err, data) {
+            if (!data || Object.getOwnPropertyNames(data.counters).length < counters.size) {
+                // Sometimes perfmon doesn't get all the counters working, no idea why.
+                // Let's just restart to try it again
+                console.log("Could not find all perf counters, restarting perfmon...");
+                perfmon.stop();
+                perfmon.start();
+                console.log(counters);
+                return;
+            }
+            // Get the value for each stat
+            const cpu = getStat('cpu', data);
+            const mem = getStat('mem', data);
+            const dsk = getStat('dsk', data);
+            const net = getNetwork(data);
 
-        // Set this to be the latest performance info
-        screens[SCREEN_PERF] = screen;
+            // Create a screen with the data
+            const screen =
+                `cpu: ${'\u0008'.repeat(cpu)}${' '.repeat(Math.max(0, 10 - cpu))} |  ${title(0, 0)} ` +
+                `mem: ${'\u0008'.repeat(mem)}${' '.repeat(Math.max(0, 10 - mem))} |  ${title(1, 0)} ` +
+                `dsk: ${'\u0008'.repeat(dsk)}${' '.repeat(Math.max(0, 10 - dsk))} |  ${title(2, 0)} ` +
+                `net: ${'\u0008'.repeat(net)}${' '.repeat(Math.max(0, 10 - net))} |  ${title(3, 0)} `;
+
+            // Set this to be the latest performance info
+            screens[SCREEN_PERF] = screen;
+        });
     });
 }
 
@@ -91,6 +108,9 @@ async function startStockMonitor() {
     const priceRegex = /"currentPrice":({[^}]+})/;
 
     function getStocks() {
+        if (currentScreenIndex != SCREEN_STOCK)
+            return;
+
         const promises = [];
         for (const [key, value] of stocks) {
             promises.push(new Promise((resolve) => {
@@ -127,6 +147,7 @@ async function startStockMonitor() {
         // Set this to be the latest stock info
         screens[SCREEN_STOCK] = lines.join('');
 
+        console.log("Stock updated!");
         // Pause a bit before requesting more info
         await wait(KEYBOARD_UPDATE_TIME);
     }
@@ -139,8 +160,10 @@ async function startWeatherMonitor() {
     const rainRegex = /"precipitationProbability":([^,]+),/;
 
     function getWeather() {
+        if (currentScreenIndex != SCREEN_WEATHER)
+            return;
         return new Promise((resolve) => {
-            request(`https://www.yahoo.com/news/weather/united-states/seattle/seattle-2490383`, (err, res, body) => {
+            request(`https://www.yahoo.com/news/weather/germany/baden-wurttemberg/kornwestheim-668327`, (err, res, body) => {
                 const weather = {};
                 const temp = tempRegex.exec(body);
                 if (temp && temp.length > 1) {
@@ -187,6 +210,8 @@ async function startWeatherMonitor() {
             }
             lastWeather = weather;
 
+            weather.temp.now = (weather.temp.now - 32) / 1.8;
+            console.log("Weather updated!");
             // Create the new screen
             const screen =
                 `desc: ${description}${' '.repeat(Math.max(0, 9 - ('' + description).length))} |  ${title(0, 2)} ` +
